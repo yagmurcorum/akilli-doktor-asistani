@@ -28,7 +28,6 @@ logger = logging.getLogger("doctor-assistant-api")
 
 
 # Ortam değişkenleri: API anahtarları, model ve CORS ayarları
-
 load_dotenv()
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
 if not GOOGLE_API_KEY:
@@ -78,6 +77,7 @@ llm = ChatGoogleGenerativeAI(
 # Kullanıcı bazlı konuşma hafızası: her kullanıcı/oturum için ayrı
 user_to_memory: Dict[str, ConversationBufferMemory] = {}
 
+
 # İstek/Yanıt modelleri
 class ChatRequest(BaseModel):
     """İstemci istek gövdesi"""
@@ -111,6 +111,7 @@ class ChatRequest(BaseModel):
         if normalized in {"erkek", "male", "m"}:
             return "male"
         return "other"
+
 
 class ChatResponse(BaseModel):
     """Model yanıtı"""
@@ -194,6 +195,7 @@ def root():
         "message": "Doktor Asistanı API. Belgeler için /docs, sağlık kontrolü için /health, sohbet için /chat",
     }
 
+
 @app.get("/health")
 def health():
     """Sağlık kontrolü: otomasyon/izleme için basit yanıt"""
@@ -258,3 +260,9 @@ async def chat_with_doctor(req: ChatRequest) -> ChatResponse:
     except Exception as exc:
         logger.exception("chat failed: %s", exc)
         raise HTTPException(status_code=500, detail="Beklenmeyen bir hata oluştu. Lütfen daha sonra tekrar deneyin.")
+
+
+# Uygulama giriş noktası
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8000)
