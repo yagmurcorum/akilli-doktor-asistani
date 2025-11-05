@@ -32,13 +32,14 @@ import json
 import uuid
 import time
 import html
+import re
 import requests
 import streamlit as st
 
 # ════════════════════════════════════════════════════════════════════════════
 # 📡 BACKEND BAĞLANTISI / API URL
 # ════════════════════════════════════════════════════════════════════════════
-API_URL = os.getenv("API_URL", "https://akilli-doktor-api.onrender.com/chat")
+API_URL = os.getenv("API_URL", "https://akilli-doktor-asistani.onrender.com/chat")
 
 # ════════════════════════════════════════════════════════════════════════════
 # 🎨 TASARIM SİSTEMİ VE STİLLER
@@ -269,7 +270,7 @@ st.markdown(
     <div class="topbar">
       <div class="topbar-inner">
         <div class="brand">🩺 Akıllı Doktor Asistanı</div>
-        <div class="brand-tagline">Danışman yapay zeka ile sağlık sorularınıza akıllı yanıt</div>
+        <div class="brand-tagline">Danışman yapay zekâ ile sağlık sorularınıza akıllı yanıt</div>
       </div>
     </div>
     """,
@@ -283,10 +284,62 @@ def render_bubble_text(text: str) -> str:
     """
     Balonlarda metni güvenli ve düzgün satır sonlarıyla göstermek için:
       1) HTML'yi kaçır (XSS/bozulma önler)
-      2) \n kaçışlarını <br> ile görünür yeni satıra çevir
+      2) Markdown formatını HTML'e çevir (**text** → <b>text</b>)
+      3) Liste işaretlerini düzelt (* veya - → →)
+      4) \n kaçışlarını <br> ile görünür yeni satıra çevir
     """
-    safe = html.escape(text or "")
+    if not text:
+        return ""
+    
+    # Liste işaretlerini önce düzelt: Satır başında * veya - ile başlayanları → ile değiştir
+    lines = text.split('\n')
+    processed_lines = []
+    for line in lines:
+        # Satır başında * veya - varsa → ile değiştir
+        stripped = line.lstrip()
+        if stripped.startswith('* ') or stripped.startswith('- '):
+            # Satır başındaki boşlukları koru, sadece * veya - kısmını değiştir
+            indent = line[:len(line) - len(stripped)]
+            processed_lines.append(indent + '→ ' + stripped[2:])
+        else:
+            processed_lines.append(line)
+    text = '\n'.join(processed_lines)
+    
+    # Sonra markdown formatını HTML'e çevir
+    # **text** → <b>text</b> (kalın yazı)
+    text = re.sub(r'\*\*(.+?)\*\*', r'<b>\1</b>', text)
+    # *text* → <i>text</i> (italik yazı - liste işaretleri zaten değiştirildi)
+    text = re.sub(r'\*(.+?)\*', r'<i>\1</i>', text)
+    
+    # HTML tag'lerini geçici olarak koru, sonra içerikleri escape et
+    # <b> ve <i> tag'lerini geçici kodlara çevir
+    text = text.replace('<b>', '___BOLD_START___')
+    text = text.replace('</b>', '___BOLD_END___')
+    text = text.replace('<i>', '___ITALIC_START___')
+    text = text.replace('</i>', '___ITALIC_END___')
+    
+    # HTML'yi kaçır (güvenlik - XSS önleme)
+    safe = html.escape(text)
+    
+    # Tag'leri geri al
+    safe = safe.replace('___BOLD_START___', '<b>')
+    safe = safe.replace('___BOLD_END___', '</b>')
+    safe = safe.replace('___ITALIC_START___', '<i>')
+    safe = safe.replace('___ITALIC_END___', '</i>')
+    
+    # \n kaçışlarını <br> ile görünür yeni satıra çevir
     return safe.replace("\n", "<br>")
+
+# Cinsiyet alanını API'nin beklediği değerlere normalize etmek için yardımcı
+def normalize_gender(raw: str) -> str:
+    if not raw:
+        return "other"
+    v = raw.strip().lower()
+    if v in {"kadın", "kadin", "female", "f"}:
+        return "female"
+    if v in {"erkek", "male", "m"}:
+        return "male"
+    return "other"
 
 # ════════════════════════════════════════════════════════════════════════════
 # 🗂️ SOHBET DURUMU — Çoklu Oturum Hafızası
@@ -326,8 +379,8 @@ def send_and_append(message_text: str):
     missing = []
     if not user_name:
         missing.append("Ad")
-    if not age_txt or not age_txt.isdigit():
-        missing.append("Yaş (sayı)")
+    if not age_txt or not age_txt.isdigit() or not (1 <= int(age_txt) <= 120):
+        missing.append("Yaş (1–120 arası sayı)")
     if gender == "Seçiniz":
         missing.append("Cinsiyet")
     if missing:
@@ -340,7 +393,7 @@ def send_and_append(message_text: str):
         payload = {
             "name": user_name,
             "age": int(age_txt),
-            "gender": gender,               # (Backend kullanmasa da ileriye dönük)
+            "gender": normalize_gender(gender),               # (Backend kullanmasa da ileriye dönük)
             "message": message_text.strip(),
             "session_id": st.session_state.current_chat_id,
         }
@@ -366,13 +419,22 @@ col_side, col_chat = st.columns([0.92, 3.08])
 with col_side:
     st.markdown('<div class="card sidebar-card">', unsafe_allow_html=True)
     st.subheader("💬 Sohbetler")
-    for cid in list(st.session_state.chats.keys()):
-        title = st.session_state.titles.get(cid, f"Sohbet {cid}")
-        is_active = (cid == st.session_state.current_chat_id)
-        if st.button(title, key=f"sbtn_{cid}", use_container_width=True):
-            st.session_state.current_chat_id = cid
-            st.rerun()
-        st.markdown(f"<div class='session-btn{' active' if is_active else ''}'></div>", unsafe_allow_html=True)
+    
+    # Boş sohbet kontrolü - Kullanıcıya bilgilendirme mesajı göster
+    # Eğer hiç sohbet yoksa veya tüm sohbetler boşsa, kullanıcıya yol gösterici mesaj göster
+    # Bu sayede boş alanlar yerine kullanıcı dostu bir bilgilendirme görünür
+    if len(st.session_state.chats) == 0 or all(len(msgs) == 0 for msgs in st.session_state.chats.values()):
+        st.info("💡 Yeni bir sohbet başlatmak için '➕ Yeni' butonuna tıklayın.")
+    else:
+        # Mevcut sohbetleri listele
+        for cid in list(st.session_state.chats.keys()):
+            title = st.session_state.titles.get(cid, f"Sohbet {cid}")
+            is_active = (cid == st.session_state.current_chat_id)
+            if st.button(title, key=f"sbtn_{cid}", use_container_width=True):
+                st.session_state.current_chat_id = cid
+                st.rerun()
+            st.markdown(f"<div class='session-btn{' active' if is_active else ''}'></div>", unsafe_allow_html=True)
+    
     c1, c2 = st.columns(2)
     with c1:
         if st.button("➕ Yeni", use_container_width=True):
@@ -410,22 +472,44 @@ with col_chat:
 
     # (1) Sohbet geçmişi
     st.markdown('<div class="chat-scroll">', unsafe_allow_html=True)
-    for role, text, ts in active_history():
-        ts_str = time.strftime("%H:%M", time.localtime(ts))
-        side  = "right" if role == "Kullanıcı" else "left"
-        klass = "user" if role == "Kullanıcı" else "bot"
-        safe_text = render_bubble_text(text)
+    
+    # Boş sohbet kontrolü - Hoş geldin mesajı göster
+    # Eğer aktif sohbet boşsa (henüz mesaj yoksa), kullanıcıya hoş geldin mesajı göster
+    # Bu sayede boş chat alanı yerine kullanıcıyı karşılayan ve yol gösteren bir mesaj görünür
+    if len(active_history()) == 0:
         st.markdown(
-            f"""
-            <div class="row {side}">
-              <div class="bubble {klass}">
-                <b>{role}</b><span class="stamp">· {ts_str}</span><br>
-                {safe_text}
+            """
+            <div class="row left">
+              <div class="bubble bot">
+                <b>Asistan</b><span class="stamp">· Hoş geldiniz!</span><br>
+                Merhaba! Ben Akıllı Doktor Asistanınız. 🩺<br><br>
+                Sağlık sorularınızı bana sorabilirsiniz. Lütfen sol panelden <b>Ad, Yaş ve Cinsiyet</b> bilgilerinizi girin, 
+                ardından aşağıdaki mesaj kutusuna sorunuzu yazın veya hızlı başlat çiplerinden birini seçin.<br><br>
+                <b>Önemli:</b> Bu sistem sadece genel bilgi verir. Acil durumlarda 112'yi arayın veya hekiminize başvurun.
               </div>
             </div>
             """,
             unsafe_allow_html=True,
         )
+    else:
+        # Normal sohbet geçmişi - Mesajlar varsa göster
+        for role, text, ts in active_history():
+            ts_str = time.strftime("%H:%M", time.localtime(ts))
+            side  = "right" if role == "Kullanıcı" else "left"
+            klass = "user" if role == "Kullanıcı" else "bot"
+            safe_text = render_bubble_text(text)
+            st.markdown(
+                f"""
+                <div class="row {side}">
+                  <div class="bubble {klass}">
+                    <b>{role}</b><span class="stamp">· {ts_str}</span><br>
+                    {safe_text}
+                  </div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+    
     st.markdown('</div>', unsafe_allow_html=True)
 
     # (2) Mesaj girişi (Enter = Gönder) — Zorunlu alan kontrolleri send_and_append içinde

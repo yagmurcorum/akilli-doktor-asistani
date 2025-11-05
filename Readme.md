@@ -1,134 +1,164 @@
-# 🩺 Akıllı Doktor Asistanı (Gemini)
-Bu proje, sağlıkla ilgili genel sorulara kibar ve yaşa duyarlı yanıtlar veren bir sohbet asistanıdır. İki çalışma biçimi: Terminalden sohbet ve FastAPI ile REST API.
+# 🩺 Akıllı Doktor Asistanı (Gemini 2.5 + LangChain + FastAPI + Streamlit)
 
-## 1) Problem Tanımı
-- Kullanıcı sağlık soruları sorar; asistan yaşa duyarlı, nazik ve güvenli cevaplar üretir.
-- Konuşma hafızası sayesinde önceki mesajlar unutulmaz.
-- Önce terminalde hızlı dene; sonra API ile dış dünyaya aç.
+**Akıllı Doktor Asistanı**, yaş ve cinsiyete göre kişiselleştirilmiş, hafızalı ve empatik bir sağlık danışmanıdır.  
+Üç farklı şekilde kullanılabilir:
 
-## 2) Öğrenme Hedefleri
-- Gemini 2.x ile LLM kullanımı ve parametre seçimi
-- LangChain ile hafıza (ConversationBufferMemory) ve zincir
-- FastAPI + Uvicorn ile REST API
-- .env ile gizli anahtar yönetimi, requests ile istemci
+- 🖥️ **Terminal** (doğrudan LLM ile sohbet)  
+- 🌐 **FastAPI REST API**  
+- 💻 **Streamlit Web Arayüzü** (modern, çoklu sohbet destekli)
 
-## 3) Teknolojiler
-- FastAPI + Uvicorn
-- LangChain
-- Gemini (langchain-google-genai, google-generativeai): 2.5-flash (hız/fiyat), 2.5-pro (muhakeme)
-- python-dotenv
-- requests  
-Neden Gemini 2.x? Uzun bağlam penceresi, güncel hız/kalite profilleri.
+> ⚠️ Sistem yalnızca bilgilendirme amaçlıdır. Tıbbi tanı veya tedavi sunmaz; acil durumlarda 112 aranmalıdır.
 
-## 4) Dosya Yapısı
+
+## 🎯 Amaç
+
+Kullanıcı, sağlıkla ilgili sorularını doğal dilde sorar.  
+Asistan, kullanıcının adı, yaşı ve cinsiyetine göre yanıtları kişiselleştirir.  
+Konuşma hafızası sayesinde önceki mesajlar korunur, yanıtlar bağlamdan kopmaz.  
+Cinsiyet ve yaş gruplarına özel öneriler içerir.
+
+
+## ⚙️ Temel Özellikler
+
+- **Kişiselleştirme:** Cinsiyet ve yaş grubuna özel SystemMessage ile farklı sağlık odakları.  
+- **Hafıza Yönetimi:** LangChain `ConversationBufferMemory`; sistem mesajı korunarak budama (`MEMORY_MAX_MESSAGES`).  
+- **Çoklu Oturum:** Her sohbetin bağımsız `session_id`’si vardır.  
+- **Modern Web UI:** Streamlit ile çoklu sohbet, hızlı başlat çipleri, mobil uyumlu tasarım.  
+- **Güvenlik:** `.env` yönetimi, CORS beyaz listesi (`ALLOWED_ORIGINS`), XSS koruması, hata maskeleme.
+
+
+## 🧩 Teknik Mimari
+
+```text
+Kullanıcı / UI
+    │
+    ▼
+FastAPI (/chat)  ──► LangChain ConversationChain ──► Gemini 2.5
+    │                        ▲
+    │                        │
+    └───► ConversationBufferMemory (user + session_id)
+```
+
+**Akış:**
+
+1. İstemci, FastAPI `/chat` endpoint’ine `name`, `age`, `gender`, `message`, `session_id` gönderir.
+2. Backend, hafıza oluşturur veya yükler, SystemMessage ekler.
+3. LangChain ConversationChain modeli (Gemini 2.5 Flash) çağrılır.
+4. Yanıt hafızaya kaydedilir, gerekirse budanır.
+
+
+## 📁 Dosya Yapısı
+
+```text
 akilli-doktor-asistani/
-- asistan_terminal.py  (Terminal sohbet)
-- asistan_api.py       (FastAPI sunucusu)
-- asistan_istemci.py   (Terminalden API’ye sohbet)
-- requirements.txt     
-- .env                 (API anahtarı – paylaşmayın)
-- README.md            (bu dosya)
+├── asistan_api.py          # FastAPI backend (ana API)
+├── asistan_terminal.py     # Doğrudan LLM ile terminal sohbeti
+├── asistan_istemci.py      # API istemcisi (terminal)
+├── streamlit_ui.py         # Streamlit web arayüzü
+├── requirements.txt        # Bağımlılıklar
+├── .env.example            # Örnek ortam değişkenleri
+└── README.md
+```
 
-## 5) Kurulum (VS Code + PowerShell)
-1) cd "<proje_klasörü_yolu>"  
-2) python -m venv venv  →  .\venv\Scripts\Activate.ps1  
-3) Paketler:
-- pip install fastapi==0.120.1 uvicorn==0.38.0 python-dotenv==1.2.1 requests==2.32.5
-- pip install "langchain==0.3.27" "langchain-core==0.3.79" "langchain-community==0.3.30"
-- pip install "langchain-google-genai==2.0.10" "google-generativeai==0.8.5"  
-4) .env
-- GOOGLE_API_KEY=BURAYA_GEMINI_API_KEY  
-- LLM_MODEL=gemini-2.5-flash  (istersen gemini-2.5-pro)
 
-## 6) Nasıl Çalıştırılır?
-A) Terminal sohbeti: python asistan_terminal.py  
-B) API: uvicorn asistan_api:app --reload  
-- Test ekranı: http://127.0.0.1:8000/docs  
-- Sağlık: http://127.0.0.1:8000/health  
-C) İstemci (opsiyonel): python asistan_istemci.py  
-- API_URL: http://127.0.0.1:8000/chat
+## ⚙️ Ortam Değişkenleri (.env)
 
-## 6.1) API’yi test etme — Try it out (en kolay yol)
-- Adım 1: Sunucuyu başlat  
-  .\venv\Scripts\Activate.ps1 → uvicorn asistan_api:app --reload  
-  (Ekranda: “Uvicorn running on http://127.0.0.1:8000”)
-- Adım 2: Tarayıcıda test ekranını aç  
-  http://127.0.0.1:8000/docs
-- Adım 3: /chat kutusuna gel → “Try it out” butonuna bas
-  - name: Yagmur
-  - age: 24
-  - message: Başım ağrıyor…
-  - “Execute” de
-- Adım 4: Aşağıdaki “Responses” bölümünde sonucu gör  
-  Code 200 ve Response body içinde {"response": "..."} yer alır.
-- Not: /chat adresi POST ister. Adres çubuğu GET gönderdiğinden /chat’i doğrudan açarsan 405 (Method Not Allowed) görmen normaldir.
+```env
+GOOGLE_API_KEY=YOUR_GEMINI_API_KEY
+LLM_MODEL=gemini-2.5-flash
+MEMORY_MAX_MESSAGES=20
+DEBUG=false
+ALLOWED_ORIGINS=http://localhost:8501,https://akilli-doktor-asistani.streamlit.app
+API_URL=http://127.0.0.1:8000/chat
+```
 
-## 6.2) API’yi test etme — Terminal istemcisi (alternatif)
-- Neden? Tarayıcıdaki forma gerek kalmadan, komut satırından gerçek bir istemci gibi test etmek için.
-- Çalıştır: python asistan_istemci.py  
-  - Ad ve yaş gir, mesaj yaz, yanıt terminalde görünür (çıkış: quit).
-- Tek satır PowerShell örneği (istemci yazmadan hızlı dene):
-Invoke-RestMethod -Uri http://127.0.0.1:8000/chat -Method Post -Body (@{ name="Yagmur"; age=24; message="Başım ağrıyor." } | ConvertTo-Json) -ContentType "application/json"
+> `.env` dosyasını repoya yükleme.
+> `.gitignore` içinde `.env`, `venv/`, `__pycache__/`, `.streamlit/` yer almalı.
 
-## 6.3) Sık karşılaşılan durumlar — Hızlı çözümler
-- 405 Method Not Allowed: /chat’i GET ile açtın → /docs’tan “Try it out” kullan ya da yukarıdaki POST komutunu çalıştır.
-- 404 Not Found: Yanlış adres → Sohbet: /chat, test ekranı: /docs, sağlık: /health.
-- 422 Unprocessable Entity: name (yazı), age (sayı), message (yazı) alanlarını eksiksiz gir.
-- 500 Internal Server Error: Çoğunlukla `.env`’de `GOOGLE_API_KEY` eksik/yanlış. Düzelt → terminali kapat-aç → sunucuyu yeniden başlat.
-- Port 8000 meşgul: netstat -ano | findstr :8000 → Stop-Process -Id <PID> -Force.
 
-## 7) Terminal Akışı — Ne görürsün?
-- İsim/yaş alınır; “başlangıç talimatı”na eklenir.
-- Yanıtlar `— Doktor Asistanı —` başlığıyla gösterilir.
-- Hafıza Özeti listelenir (HUMAN/AI).
-- Günlükler sade (verbose=False).
 
-Terminal çıktısı hakkında:
-- Öğretici mod: `ConversationChain(..., verbose=True)` bilerek açık; zincirin adımlarını terminalde gösterir (öğrenme amaçlı faydalıdır).
-- Sade mod: Daha az çıktı istersek `verbose=False` yap. API tarafında zaten `verbose=False` önerilir; ayrıntılı kayıtlar `logging` ile tutulur.
+## 🚀 Kurulum ve Çalıştırma
 
-## 8) İçeride Nasıl Çalışıyor?
-1) LLM (Gemini) sohbet motorudur: yazarsın, yanıtlar.  
-2) ConversationBufferMemory, önceki mesajları saklar; model tutarlı devam eder.  
-3) Terminal = tek süreç/tek hafıza; API = kullanıcıya özel hafıza.  
-4) Parametreler: model=gemini-2.5-flash/pro; temperature=0.3–0.7.  
-Sistem talimatı: Basit kullanımda kullanıcı mesajı gibi eklenir; daha doğru yaklaşım “system” rolü (LangChain SystemMessage) olarak vermektir.
+```bash
+# 1. Ortam oluştur
+python -m venv venv
+.\venv\Scripts\activate  # veya source venv/bin/activate
 
-## 9) Güvenlik
-- `.env`’yi paylaşma; sızarsa anahtarı iptal et, yenisini üret.
-- Tıbbi teşhis/ilaç önerisi yok; acil durumda 112.
+# 2. Bağımlılıkları yükle
+pip install -r requirements.txt
 
-## 10) Sorun Giderme
-Sürüm uyumsuzluğu:
-- pip uninstall -y langchain-google-genai langchain-core langchain  
-- pip install "langchain==0.3.27" "langchain-core==0.3.79" "langchain-community==0.3.30"  
-- pip install "langchain-google-genai==2.0.10" "google-generativeai==0.8.5"  
-Model 404:
-- llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash", api_key=api_key)  
-- Gerekirse api_version="v1" ile dene  
-Modelleri listele:
-- import os, google.generativeai as genai  
-- genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))  
-- for m in genai.list_models(): print(m.name)  
-Port meşgul:
-- Ctrl+C → netstat -ano | findstr :8000 → Stop-Process -Id <PID> -Force  
-Yanlış venv:
-- deactivate → .\venv\Scripts\Activate.ps1
+# 3. FastAPI başlat
+uvicorn asistan_api:app --reload
 
-## 11) Geliştirme Planı
-- Hafızayı SQLite/SQLAlchemy ile kalıcı yapmak
-- `user_id` ile hafıza eşlemesi
-- Basit web arayüzü (React + SSE)
-- Güvenli yanıt şablonları (acil durum uyarısı, teşhis vermez)
+# 4. Web UI başlat
+streamlit run streamlit_ui.py
+```
 
-## 12) Teknik Notlar (Rapor)
-- `/chat` sadece POST kabul eder; test için /docs (Try it out) ya da POST komutu kullan.
-- Sunucu: `uvicorn asistan_api:app --reload`
-- Sağlık: `http://127.0.0.1:8000/health`
-- Doküman: `http://127.0.0.1:8000/docs`
-- `.env` zorunlu: `GOOGLE_API_KEY=...`
-- Model: `gemini-2.5-flash` başlangıç; `gemini-2.5-pro` muhakeme; 404’de listeyi kontrol et, gerekirse `api_version="v1"`.
-- Hafıza: kullanıcı başına `ConversationBufferMemory`; ilk turda sistem talimatı.
-- Loglama: `logging`; root `/` için basit karşılama, `/favicon.ico` 404 normaldir.
+**Test:**
 
-Hazırlayan: Yağmur Çorum — Model: Google Gemini 2.x (LangChain + FastAPI) — Amaç: Yapay zekâ destekli sağlık danışma asistanı prototipi
+* FastAPI: http://127.0.0.1:8000/docs
+* Streamlit: http://localhost:8501
+
+
+
+## 🔗 API Özeti
+
+### POST `/chat`
+
+**İstek:**
+
+```json
+{
+  "name": "Yagmur",
+  "age": 24,
+  "gender": "female",
+  "message": "Başım ağrıyor; ne yapmalıyım?",
+  "session_id": "chat123"
+}
+```
+
+**Yanıt:**
+
+```json
+{ "response": "Sayın Yagmur, baş ağrısı için..." }
+```
+
+
+## ☁️ Deploy
+
+### 🔹 Backend (FastAPI) – Render
+
+* **Build Command:** `pip install -r requirements.txt`
+* **Start Command:** `uvicorn asistan_api:app --host 0.0.0.0 --port $PORT`
+* **Environment Variables:**
+  `GOOGLE_API_KEY`, `LLM_MODEL`, `ALLOWED_ORIGINS`, `MEMORY_MAX_MESSAGES`
+
+### 🔹 Web UI (Streamlit Cloud)
+
+* **Main file:** `streamlit_ui.py`
+* **API_URL:** `https://akilli-doktor-asistani.onrender.com/chat`
+
+
+## 🛡️ Güvenlik ve Sınırlamalar
+
+* `.env` dosyasını paylaşma.
+* CORS ayarlarını yalnızca güvenilir domainlerle sınırla.
+* Yanıtlar yalnızca bilgilendirme amaçlıdır, tıbbi teşhis değildir.
+
+
+## 🧠 Gelecek Planı
+
+* [ ] SQLite/SQLAlchemy ile kalıcı hafıza
+* [ ] Çoklu dil desteği (TR/EN)
+* [ ] Sesli asistan ve geri bildirim modülü
+* [ ] Gelişmiş istatistik/log analizi
+
+
+## 👩‍💻 Geliştiren
+
+**Yağmur Çorum**
+
+> Gemini 2.5 + LangChain ile kişiselleştirilmiş yapay zekâ asistanı geliştirme projesi
+
+**Teknolojiler:** FastAPI · LangChain · Streamlit · Google Gemini
+**Amaç:** Kişiye özel, güvenli ve anlamlı sağlık danışma deneyimi oluşturmak
