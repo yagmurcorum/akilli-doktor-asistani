@@ -39,7 +39,7 @@ import streamlit as st
 # ════════════════════════════════════════════════════════════════════════════
 # 📡 BACKEND BAĞLANTISI / API URL
 # ════════════════════════════════════════════════════════════════════════════
-API_URL = os.getenv("API_URL", "https://akilli-doktor-asistani.onrender.com/chat")
+API_URL = os.getenv("API_URL", "https://akilli-doktor-asistani-buef.onrender.com/chat")
 
 # ════════════════════════════════════════════════════════════════════════════
 # 🎨 TASARIM SİSTEMİ VE STİLLER
@@ -398,7 +398,7 @@ def send_and_append(message_text: str):
             "session_id": st.session_state.current_chat_id,
         }
         with st.spinner("Yanıt hazırlanıyor..."):
-            resp = requests.post(API_URL, json=payload, timeout=60)
+            resp = requests.post(API_URL, json=payload, timeout=90)
         if resp.status_code == 200:
             reply = resp.json().get("response", "")
             append_message("Asistan", reply)
