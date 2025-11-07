@@ -328,7 +328,7 @@ def render_bubble_text(text: str) -> str:
     safe = safe.replace('___ITALIC_END___', '</i>')
     
     # \n kaçışlarını <br> ile görünür yeni satıra çevir
-    return safe.replace("\n", "<br>")
+    return safe.replace("\\n", "<br>").replace("\n", "<br>")
 
 # Cinsiyet alanını API'nin beklediği değerlere normalize etmek için yardımcı
 def normalize_gender(raw: str) -> str:
