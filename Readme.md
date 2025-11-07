@@ -194,9 +194,30 @@ streamlit run streamlit_ui.py
 
 ## 🛡️ Güvenlik ve Sınırlamalar
 
-- `.env` dosyasını hiçbir zaman paylaşma  
-- CORS ayarlarını sadece güvenilir domainlerle sınırla  
-- Yanıtlar yalnızca **bilgilendirme** amaçlıdır, **tıbbi teşhis** değildir  
+- `.env` dosyası **asla repoya yüklenmemelidir.** Gizli API anahtarları yalnızca yerelde veya güvenli ortam değişkenleri üzerinden tanımlanmalıdır.
+
+- `ALLOWED_ORIGINS` değişkeni ile **CORS politikası** uygulanmaktadır.  
+  Bu ayar sayesinde yalnızca `localhost` ve `https://akilli-doktor-asistani.streamlit.app` gibi güvenilir domainlerden gelen istekler kabul edilir.  
+  Böylece dış kaynaklı (örneğin kötü niyetli sitelerin) API’ye erişimi engellenir.
+
+- FastAPI bu kontrolü aşağıdaki **CORS middleware** üzerinden gerçekleştirir:
+  ```python
+  app.add_middleware(
+      CORSMiddleware,
+      allow_origins=allowed_origins,
+      allow_credentials=True,
+      allow_methods=["*"],
+      allow_headers=["*"],
+  )
+  ```
+Bu yapı her gelen istekte `Origin` başlığını kontrol eder ve yalnızca izinli domainlerden gelen talepleri kabul eder.  
+İzinli olmayan domainlerden gelen çağrılar tarayıcı tarafından otomatik olarak engellenir.
+
+`DEBUG=false` olmalıdır.  
+Production ortamında `DEBUG=true` bırakmak, loglarda hassas veri sızıntısına yol açabilir.
+
+Yanıtlar yalnızca **bilgilendirme amaçlıdır**.  
+Sistem herhangi bir şekilde **tıbbi tanı veya tedavi önerisi** sunmaz; acil durumlarda **112** aranmalıdır.
 
 ---
 
